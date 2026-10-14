@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RIFT PONG — Dual-PC Half-Court Multiplayer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-void: #030712;
+      --bg-panel: rgba(15, 23, 42, 0.82);
+      --border-subtle: rgba(148, 163, 184, 0.2);
+      --p1-neon: #38bdf8;
+      --p2-neon: #f43f5e;
+      --rift-gold: #facc15;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-void);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      color: #f8fafc;
+      touch-action: none;
+    }
+
+    .font-arcade {
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: 0.08em;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #pongCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: none;
+    }
+
+    .glass-card {
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-cyber {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.98) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.12);
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn-cyber:hover:not(:disabled) {
+      border-color: rgba(56, 189, 248, 0.85);
+      transform: translateY(-1px);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-cyber:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .btn-primary-cyan {
+      background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+      color: #020617;
+      font-weight: 800;
+      border: 1px solid #bae6fd;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary-cyan:hover:not(:disabled) {
+      background: linear-gradient(135deg, #7dd3fc 0%, #0ea5e9 100%);
+      box-shadow: 0 0 35px rgba(56, 189, 248, 0.65);
+      transform: translateY(-2px);
+    }
+
+    .btn-primary-rose {
+      background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+      color: #fff1f2;
+      font-weight: 800;
+      border: 1px solid #fecdd3;
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary-rose:hover:not(:disabled) {
+      background: linear-gradient(135deg, #fda4af 0%, #f43f5e 100%);
+      box-shadow: 0 0 35px rgba(244, 63, 94, 0.65);
+      transform: translateY(-2px);
+    }
+
+    @keyframes pulseBorder {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.4; }
+    }
+
+    .animate-pulse-fast {
+      animation: pulseBorder 1s infinite ease-in-out;
+    }
+  </style>
+</head>
+
+<body class="relative select-none overflow-hidden">
+
+  <canvas id="pongCanvas" aria-label="Split-Court Pong Canvas"></canvas>
+
+  <!-- =====================================================================
+       TOP HUD OVERLAY (Scores, Half-Court Status, Controls, Room Code)
+       ===================================================================== -->
+  <header class="fixed top-0 left-0 right-0 z-20 pointer-events-none p-2.5 sm:p-4">
+    <div class="max-w-7xl w-full mx-auto flex flex-wrap items-center justify-between gap-2">
+
+      <div class="glass-card rounded-2xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
+        <div class="flex items-center gap-2">
+          <span id="hudRoleDot" class="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+          <div>
+            <div id="hudRoleLabel" class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">YOUR SCREEN</div>
+            <div id="hudSideTitle" class="font-arcade text-xs sm:text-sm font-extrabold text-sky-300">LEFT COURT (P1)</div>
+          </div>
+        </div>
+
+        <div id="hudRoomBadge" class="hidden pl-3 border-l border-slate-700/80 flex items-center gap-2">
+          <div>
+            <div class="text-[9px] uppercase tracking-wider text-slate-400">ROOM CODE</div>
+            <div id="hudRoomCode" class="font-mono-code text-xs sm:text-sm font-extrabold text-amber-300 tracking-widest">-----</div>
+          </div>
+          <button id="btnCopyHudCode" type="button" class="btn-cyber rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-200" title="Copy Room Code">
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl px-4 py-1.5 sm:px-6 sm:py-2 flex items-center gap-4 sm:gap-6">
+        <div class="text-center">
+          <div class="text-[9px] uppercase tracking-widest text-sky-400 font-bold">P1 (LEFT)</div>
+          <div id="scoreP1" class="font-arcade text-xl sm:text-2xl font-black text-white">0</div>
+        </div>
+
+        <div class="flex flex-col items-center px-2 border-x border-slate-800">
+          <span id="courtBallStatus" class="text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30">
+            STANDBY
+          </span>
+          <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono-code">
+            <span id="hudRally">RALLY: 0</span>
+            <span>•</span>
+            <span id="hudSpeed">100% SPD</span>
+          </div>
+        </div>
+
+        <div class="text-center">
+          <div class="text-[9px] uppercase tracking-widest text-rose-400 font-bold">P2 (RIGHT)</div>
+          <div id="scoreP2" class="font-arcade text-xl sm:text-2xl font-black text-white">0</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 pointer-events-auto">
+        <button id="btnFlipSide" type="button" class="btn-cyber rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Switch which side of your monitor your paddle defends">
+          <svg class="w-4 h-4 text-sky-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          </svg>
+          <span id="lblFlipSide" class="hidden md:inline">Goal: Outer Edge</span>
+        </button>
+
+        <button id="btnToggleRadar" type="button" class="btn-cyber rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-200 flex items-center gap-1.5" title="Toggle incoming seam indicator on the center border">
+          <svg class="w-4 h-4 text-amber-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span id="lblRadarMode" class="hidden md:inline">Seam Radar: ON</span>
+        </button>
+
+        <button id="btnMute" type="button" class="btn-cyber rounded-xl p-2 text-slate-200" title="Mute / Unmute Synth Audio (M)">
+          <svg id="iconAudioOn" class="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          </svg>
+          <svg id="iconAudioOff" class="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        </button>
+
+        <button id="btnLeaveRoom" type="button" class="btn-cyber rounded-xl px-2.5 py-2 text-xs font-semibold text-rose-300" title="Return to Room Lobby">
+          Lobby
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <footer class="fixed bottom-0 left-0 right-0 z-20 pointer-events-none px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+    <div class="glass-card rounded-xl px-3 py-1 pointer-events-auto flex items-center gap-2">
+      <span id="netStatusDot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+      <span id="netStatusText">Connecting...</span>
+      <span class="text-slate-600">|</span>
+      <span class="font-mono-code text-[10px] text-slate-400">ID: <strong id="fullUserIdDisplay" class="text-slate-200 select-all">initializing...</strong></span>
+    </div>
+
+    <div class="glass-card rounded-xl px-3 py-1 hidden sm:flex items-center gap-3">
+      <span>🖱️ Move Mouse / Touch or <kbd class="px-1 bg-slate-800 rounded text-slate-200">W</kbd><kbd class="px-1 bg-slate-800 rounded text-slate-200">S</kbd> / <kbd class="px-1 bg-slate-800 rounded text-slate-200">↑</kbd><kbd class="px-1 bg-slate-800 rounded text-slate-200">↓</kbd> to Move Paddle</span>
+      <span>•</span>
+      <span><kbd class="px-1.5 bg-slate-800 rounded text-amber-300">SPACE</kbd> or Click to Serve</span>
+    </div>
+  </footer>
+
+  <!-- =====================================================================
+       LOBBY / ROOM CODE MODAL (Create PC-to-PC Code or Join Friend's Code)
+       ===================================================================== -->
+  <div id="lobbyModal" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md">
+    <div class="glass-card max-w-2xl w-full rounded-3xl p-6 sm:p-8 border border-sky-400/25 shadow-2xl">
+      
+      <!-- Header -->
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-400/30 text-sky-300 text-xs font-semibold mb-3">
+          <span>🖥️ PC #1 (LEFT HALF)</span>
+          <span>⚡</span>
+          <span>🖥️ PC #2 (RIGHT HALF)</span>
+        </div>
+        <h1 class="font-arcade text-3xl sm:text-4xl font-black tracking-wider text-white">
+          RIFT <span class="text-sky-400">PONG</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-300 mt-2 max-w-lg mx-auto leading-relaxed">
+          True split-screen across two computers. You <strong>only see your own half of the board</strong>—when you hit the ball past the center line, it flies off your monitor and onto your opponent's PC!
+        </p>
+      </div>
+
+      <!-- Visual Diagram of How Split-Court Works -->
+      <div class="grid grid-cols-2 gap-3 mb-6 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800 text-xs">
+        <div class="border-r-2 border-dashed border-amber-400/70 pr-3 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-sky-300 font-bold mb-1">
+            <span>HOST PC (PLAYER 1)</span>
+            <span class="text-[10px] bg-sky-500/20 px-1.5 py-0.5 rounded">0% → 50%</span>
+          </div>
+          <div class="h-14 bg-slate-950 rounded-xl border border-sky-500/40 relative flex items-center px-2">
+            <div class="w-1.5 h-8 bg-sky-400 rounded-full shadow-[0_0_10px_#38bdf8]"></div>
+            <div class="ml-4 text-[10px] text-slate-400">Defends Left Goal →</div>
+            <div class="ml-auto text-[10px] text-amber-300 font-mono-code">CENTER RIFT ➔</div>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5">Sees only the Left Court. Opponent's paddle is unseen on the other PC.</p>
+        </div>
+
+        <div class="pl-1 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-rose-300 font-bold mb-1">
+            <span class="text-[10px] bg-rose-500/20 px-1.5 py-0.5 rounded">50% → 100%</span>
+            <span>GUEST PC (PLAYER 2)</span>
+          </div>
+          <div class="h-14 bg-slate-950 rounded-xl border border-rose-500/40 relative flex items-center px-2">
+            <div class="text-[10px] text-amber-300 font-mono-code">⬅ CENTER RIFT</div>
+            <div class="ml-auto mr-4 text-[10px] text-slate-400">← Defends Right Goal</div>
+            <div class="w-1.5 h-8 bg-rose-500 rounded-full shadow-[0_0_10px_#f43f5e]"></div>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5">Sees only the Right Court. Ball bursts in from the left center border!</p>
+        </div>
+      </div>
+
+      <!-- Create or Join Columns -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Column 1: Generate Code (PC 1) -->
+        <div class="bg-slate-900/90 border border-sky-500/30 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-sky-400 mb-1">PC #1 — Host a Match</div>
+            <h2 class="font-arcade text-lg font-bold text-white mb-2">Generate Room Code</h2>
+            <p class="text-xs text-slate-400 mb-4">
+              Creates a live room and gives you a 5-letter code to type on the second PC. You will play on the <strong>Left Half-Court</strong>.
+            </p>
+          </div>
+
+          <div id="hostCodeDisplayBox" class="hidden mb-4 bg-slate-950 border border-amber-400/50 rounded-xl p-3 text-center">
+            <div class="text-[10px] uppercase tracking-widest text-amber-200/80 mb-1">Type this code on PC #2:</div>
+            <div class="flex items-center justify-center gap-2">
+              <span id="generatedCodeText" class="font-mono-code text-2xl sm:text-3xl font-extrabold tracking-[0.25em] text-amber-300">-----</span>
+              <button id="btnCopyLobbyCode" type="button" class="btn-cyber rounded-lg px-2.5 py-1.5 text-xs font-bold text-amber-200">
+                Copy
+              </button>
+            </div>
+            <div id="hostWaitStatus" class="text-[11px] text-sky-300 mt-2 animate-pulse">
+              Waiting for PC #2 to join... (or click Enter Court below)
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <button id="btnCreateRoom" type="button" class="btn-primary-cyan w-full py-3 rounded-xl text-sm uppercase tracking-wider cursor-pointer">
+              Generate Code (Host P1)
+            </button>
+            <button id="btnEnterAsHost" type="button" class="hidden btn-cyber w-full py-2.5 rounded-xl text-xs font-bold text-sky-300 uppercase tracking-wider">
+              Enter Left Court Now →
+            </button>
+          </div>
+        </div>
+
+        <!-- Column 2: Join with Code (PC 2) -->
+        <div class="bg-slate-900/90 border border-rose-500/30 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-rose-400 mb-1">PC #2 — Join a Match</div>
+            <h2 class="font-arcade text-lg font-bold text-white mb-2">Enter Friend's Code</h2>
+            <p class="text-xs text-slate-400 mb-3">
+              Type the 5-character code generated by PC #1. Your screen will lock to the <strong>Right Half-Court</strong>.
+            </p>
+
+            <input
+              id="inputRoomCode"
+              type="text"
+              maxlength="6"
+              placeholder="E.G. 7K9X2"
+              autocomplete="off"
+              class="w-full bg-slate-950 border border-slate-700 focus:border-rose-400 focus:outline-none rounded-xl px-4 py-3 text-center font-mono-code text-xl font-extrabold tracking-[0.25em] uppercase text-white placeholder-slate-600 mb-3"
+            />
+          </div>
+
+          <button id="btnJoinRoom" type="button" class="btn-primary-rose w-full py-3 rounded-xl text-sm uppercase tracking-wider cursor-pointer">
+            Join Room (Play P2)
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Error / Status Toast inside Lobby -->
+      <div id="lobbyMessage" class="hidden mt-4 rounded-xl px-4 py-2.5 text-xs font-semibold text-center border"></div>
+
+      <!-- Solo Half-Court Practice Option -->
+      <div class="mt-5 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="text-xs text-slate-400 text-center sm:text-left">
+          Want to test the <strong>Half-Court blind effect</strong> right now before connecting a second PC?
+        </div>
+        <button id="btnPracticeBot" type="button" class="btn-cyber px-4 py-2 rounded-xl text-xs font-bold text-amber-300 uppercase tracking-wider shrink-0">
+          Test Half-Court vs Unseen AI
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       VICTORY / MATCH OVER MODAL
+       ===================================================================== -->
+  <div id="matchOverModal" class="hidden fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+    <div class="glass-card max-w-md w-full rounded-3xl p-6 sm:p-8 text-center border border-amber-400/30">
+      <div class="text-xs font-bold uppercase tracking-widest text-amber-300 mb-1">FIRST TO 7 POINTS</div>
+      <h2 id="winnerBanner" class="font-arcade text-2xl sm:text-3xl font-black text-white mb-2">PLAYER 1 WINS!</h2>
+      <p id="winnerSubtext" class="text-xs text-slate-400 mb-6">Dominated the split-court rift.</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="bg-slate-900/90 border border-sky-500/30 rounded-2xl p-3">
+          <div class="text-[10px] uppercase text-sky-400 font-bold">Left Court (P1)</div>
+          <div id="finalScoreP1" class="font-arcade text-3xl font-black text-white mt-1">0</div>
+        </div>
+        <div class="bg-slate-900/90 border border-rose-500/30 rounded-2xl p-3">
+          <div class="text-[10px] uppercase text-rose-400 font-bold">Right Court (P2)</div>
+          <div id="finalScoreP2" class="font-arcade text-3xl font-black text-white mt-1">0</div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2.5">
+        <button id="btnRematch" type="button" class="btn-primary-cyan w-full py-3 rounded-xl text-sm uppercase tracking-wider">
+          Play Rematch
+        </button>
+        <button id="btnBackToLobby" type="button" class="btn-cyber w-full py-2.5 rounded-xl text-xs font-semibold text-slate-300 uppercase tracking-wider">
+          Change Room Code
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       GAME ENGINE & FIREBASE MULTIPLAYER SYNC
+       ===================================================================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import {
+      getAuth,
+      signInAnonymously,
+      signInWithCustomToken,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      updateDoc,
+      onSnapshot
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    /**
+     * VIRTUAL COURT DIMENSIONS:
+     * Full Court X: 0 to 1000
+     *   - Left Half (Player 1's monitor):  X from 0 to 500
+     *   - Center Rift Line (Seam):         X = 500
+     *   - Right Half (Player 2's monitor): X from 500 to 1000
+     * Full Court Y: 0 to 600
+     */
+    const COURT = {
+      FULL_W: 1000,
+      HALF_W: 500,
+      H: 600,
+      P1_PADDLE_X: 38,
+      P2_PADDLE_X: 962,
+      PADDLE_W: 14,
+      PADDLE_H: 104,
+      BALL_R: 10,
+      BASE_SPEED: 470,
+      MAX_SPEED: 980,
+      SPEED_INCREMENT: 32,
+      WIN_SCORE: 7
+    };
+
+    class ArcadeAudio {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      }
+
+      toggleMute() {
+        this.muted = !this.muted;
+        return this.muted;
+      }
+
+      playPaddleHit(isLocalScreen = true, rally = 1) {
+        if (this.muted || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          const baseFreq = isLocalScreen ? 320 : 190;
+          const freq = Math.min(720, baseFreq + rally * 18);
+
+          osc.type = isLocalScreen ? 'square' : 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.35, now + 0.09);
+
+          const vol = isLocalScreen ? 0.14 : 0.045; // Muffled if hit on the other PC!
+          gain.gain.setValueAtTime(vol, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        } catch (e) {}
+      }
+
+      playWallBounce(isOnMyScreen = true) {
+        if (this.muted || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(isOnMyScreen ? 220 : 130, now);
+          gain.gain.setValueAtTime(isOnMyScreen ? 0.09 : 0.025, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } catch (e) {}
+      }
+
+      playRiftCross(enteringMyScreen = true) {
+        if (this.muted || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(enteringMyScreen ? 260 : 480, now);
+          osc.frequency.exponentialRampToValueAtTime(enteringMyScreen ? 520 : 210, now + 0.14);
+
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.16);
+        } catch (e) {}
+      }
+
+      playScore(scoredByMe = true) {
+        if (this.muted || !this.ctx) return;
+        try {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sawtooth';
+          if (scoredByMe) {
+            osc.frequency.setValueAtTime(330, now);
+            osc.frequency.setValueAtTime(440, now + 0.09);
+            osc.frequency.setValueAtTime(659.25, now + 0.18);
+          } else {
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.linearRampToValueAtTime(95, now + 0.32);
+          }
+
+          gain.gain.setValueAtTime(0.13, now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.38);
+        } catch (e) {}
+      }
+    }
+
+    const audio = new ArcadeAudio();
+
+    const state = {
+      mode: 'LOBBY',          // 'LOBBY' | 'PLAYING' | 'GAMEOVER'
+      isPracticeBot: false,   // True when testing solo vs unseen AI
+      roomCode: '',
+      role: 'P1',             // 'P1' (Left Half: 0..500) | 'P2' (Right Half: 500..1000)
+      mirrorView: false,      // Allows flipping which side of the monitor your goal sits on
+      showSeamRadar: true,    // Shows subtle energy pulse on the center seam before ball crosses
+
+      scoreP1: 0,
+      scoreP2: 0,
+      rally: 0,
+      servingPlayer: 'P1',
+      ballState: 'SERVE',     // 'SERVE' | 'ACTIVE'
+      lastSeq: 0,
+
+      // Paddles in virtual Y coordinates (0..600)
+      myPaddleY: COURT.H / 2,
+      oppPaddleY: COURT.H / 2,
+
+      // Ball in virtual coordinates (X: 0..1000, Y: 0..600)
+      ball: {
+        x: 250,
+        y: 300,
+        vx: 0,
+        vy: 0,
+        speed: COURT.BASE_SPEED
+      },
+
+      // Visual FX
+      trail: [],
+      particles: [],
+      seamRipples: [],
+      floatingAlerts: [],
+      screenShake: 0,
+      wasBallOnMySide: true
+    };
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-rift-pong-app';
+    let db = null;
+    let auth = null;
+    let currentUser = null;
+    let roomUnsubscribe = null;
+    let lastPaddleSyncTime = 0;
+
+    const netStatusDot = document.getElementById('netStatusDot');
+    const netStatusText = document.getElementById('netStatusText');
+    const fullUserIdDisplay = document.getElementById('fullUserIdDisplay');
+
+    async function initFirebase() {
+      try {
+        if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+          netStatusDot.className = 'w-2 h-2 rounded-full bg-amber-400';
+          netStatusText.textContent = 'Offline / Local Preview Mode';
+          fullUserIdDisplay.textContent = 'local-session-' + crypto.randomUUID();
+          return;
+        }
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // RULE 3: Authenticate FIRST before any Firestore operations
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          currentUser = user;
+          if (user) {
+            netStatusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
+            netStatusText.textContent = 'Cloud Relay Ready';
+            fullUserIdDisplay.textContent = user.uid;
+          }
+        });
+      } catch (err) {
+        console.error('Firebase initialization error:', err);
+        netStatusDot.className = 'w-2 h-2 rounded-full bg-rose-400';
+        netStatusText.textContent = 'Local Mode Only';
+      }
+    }
+
+    initFirebase();
+
+    function generateRoomCodeString() {
+      const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // Unambiguous uppercase & digits
+      let code = '';
+      for (let i = 0; i < 5; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    function showLobbyMessage(msg, isError = false) {
+      const el = document.getElementById('lobbyMessage');
+      el.textContent = msg;
+      el.classList.remove('hidden', 'bg-rose-500/20', 'border-rose-400/50', 'text-rose-200', 'bg-emerald-500/20', 'border-emerald-400/50', 'text-emerald-200');
+      if (isError) {
+        el.classList.add('bg-rose-500/20', 'border-rose-400/50', 'text-rose-200');
+      } else {
+        el.classList.add('bg-emerald-500/20', 'border-emerald-400/50', 'text-emerald-200');
+      }
+    }
+
+    function getRoomDocRef(code) {
+      // RULE 1: Strict Firestore public path
+      return doc(db, 'artifacts', appId, 'public', 'data', 'pong_rooms', code);
+    }
+
+    async function createMultiplayerRoom() {
+      audio.init();
+      if (!db || !currentUser) {
+        showLobbyMessage('Cloud connection still initializing—please wait a moment or try Test Half-Court mode.', true);
+        return;
+      }
+
+      const btn = document.getElementById('btnCreateRoom');
+      btn.disabled = true;
+      btn.textContent = 'Generating Code...';
+
+      try {
+        const code = generateRoomCodeString();
+        const roomRef = getRoomDocRef(code);
+
+        const initialRoomData = {
+          roomCode: code,
+          hostUid: currentUser.uid,
+          guestUid: '',
+          status: 'WAITING',
+          scoreP1: 0,
+          scoreP2: 0,
+          rally: 0,
+          servingPlayer: 'P1',
+          ballState: 'SERVE',
+          seq: 1,
+          ballX: 220,
+          ballY: COURT.H / 2,
+          ballVx: 0,
+          ballVy: 0,
+          ballSpeed: COURT.BASE_SPEED,
+          p1Y: COURT.H / 2,
+          p2Y: COURT.H / 2,
+          updatedAt: Date.now()
+        };
+
+        await setDoc(roomRef, initialRoomData);
+
+        state.roomCode = code;
+        state.role = 'P1';
+        state.isPracticeBot = false;
+        state.lastSeq = 0;
+
+        document.getElementById('generatedCodeText').textContent = code;
+        document.getElementById('hostCodeDisplayBox').classList.remove('hidden');
+        document.getElementById('btnEnterAsHost').classList.remove('hidden');
+        showLobbyMessage(`Room ${code} created! Type "${code}" on the second PC to connect.`);
+
+        subscribeToRoom(code);
+      } catch (err) {
+        console.error('Error creating room:', err);
+        showLobbyMessage('Could not create room: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate New Code';
+      }
+    }
+
+    async function joinMultiplayerRoom() {
+      audio.init();
+      const rawCode = document.getElementById('inputRoomCode').value.trim().toUpperCase();
+      if (!rawCode || rawCode.length < 4) {
+        showLobbyMessage('Please enter the 5-character room code from PC #1.', true);
+        return;
+      }
+
+      if (!db || !currentUser) {
+        showLobbyMessage('Waiting for authentication before joining...', true);
+        return;
+      }
+
+      const btn = document.getElementById('btnJoinRoom');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+
+      try {
+        const roomRef = getRoomDocRef(rawCode);
+        const snap = await getDoc(roomRef);
+
+        if (!snap.exists()) {
+          showLobbyMessage(`Room "${rawCode}" was not found. Check the code on PC #1!`, true);
+          btn.disabled = false;
+          btn.textContent = 'Join Room (Play P2)';
+          return;
+        }
+
+        state.roomCode = rawCode;
+        state.role = 'P2';
+        state.isPracticeBot = false;
+        state.lastSeq = 0;
+
+        await updateDoc(roomRef, {
+          guestUid: currentUser.uid,
+          status: 'PLAYING',
+          updatedAt: Date.now()
+        });
+
+        subscribeToRoom(rawCode);
+        enterCourtView();
+      } catch (err) {
+        console.error('Error joining room:', err);
+        showLobbyMessage('Failed to join room: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Join Room (Play P2)';
+      }
+    }
+
+    function subscribeToRoom(code) {
+      if (!db || !currentUser) return;
+      if (roomUnsubscribe) {
+        roomUnsubscribe();
+        roomUnsubscribe = null;
+      }
+
+      const roomRef = getRoomDocRef(code);
+
+      roomUnsubscribe = onSnapshot(
+        roomRef,
+        (snapshot) => {
+          if (!snapshot.exists()) return;
+          const data = snapshot.data();
+
+          // If Host is still on the lobby modal and Guest joins, automatically launch into Left Court!
+          if (state.role === 'P1' && data.guestUid && state.mode === 'LOBBY') {
+            enterCourtView();
+            addFloatingAlert('PC #2 CONNECTED! PRESS SPACE TO SERVE', '#38bdf8');
+          }
+
+          // Sync opponent paddle position
+          if (state.role === 'P1' && typeof data.p2Y === 'number') {
+            state.oppPaddleY = data.p2Y;
+          } else if (state.role === 'P2' && typeof data.p1Y === 'number') {
+            state.oppPaddleY = data.p1Y;
+          }
+
+          // Sync authoritative ball events (serves, paddle bounces, goals, rematches)
+          if (typeof data.seq === 'number' && data.seq > state.lastSeq) {
+            const prevScore1 = state.scoreP1;
+            const prevScore2 = state.scoreP2;
+
+            state.lastSeq = data.seq;
+            state.scoreP1 = data.scoreP1 || 0;
+            state.scoreP2 = data.scoreP2 || 0;
+            state.rally = data.rally || 0;
+            state.servingPlayer = data.servingPlayer || 'P1';
+            state.ballState = data.ballState || 'SERVE';
+
+            state.ball.x = data.ballX;
+            state.ball.y = data.ballY;
+            state.ball.vx = data.ballVx;
+            state.ball.vy = data.ballVy;
+            state.ball.speed = data.ballSpeed || COURT.BASE_SPEED;
+
+            // Play audio feedback for remote events
+            if (state.scoreP1 > prevScore1 || state.scoreP2 > prevScore2) {
+              const iScored =
+                (state.role === 'P1' && state.scoreP1 > prevScore1) ||
+                (state.role === 'P2' && state.scoreP2 > prevScore2);
+              audio.playScore(iScored);
+              state.screenShake = iScored ? 6 : 14;
+            } else if (state.ballState === 'ACTIVE') {
+              // Remote player hit or served the ball on the other PC
+              audio.playPaddleHit(false, state.rally);
+            }
+
+            checkMatchOverState();
+            updateHUD();
+          }
+        },
+        (error) => {
+          console.error('Firestore room snapshot error:', error);
+        }
+      );
+    }
+
+    async function broadcastBallEvent(extraFields = {}) {
+      state.lastSeq += 1;
+      updateHUD();
+
+      if (state.isPracticeBot || !db || !currentUser || !state.roomCode) return;
+
+      try {
+        const roomRef = getRoomDocRef(state.roomCode);
+        await updateDoc(roomRef, {
+          seq: state.lastSeq,
+          scoreP1: state.scoreP1,
+          scoreP2: state.scoreP2,
+          rally: state.rally,
+          servingPlayer: state.servingPlayer,
+          ballState: state.ballState,
+          ballX: Math.round(state.ball.x * 10) / 10,
+          ballY: Math.round(state.ball.y * 10) / 10,
+          ballVx: Math.round(state.ball.vx * 10) / 10,
+          ballVy: Math.round(state.ball.vy * 10) / 10,
+          ballSpeed: Math.round(state.ball.speed),
+          updatedAt: Date.now(),
+          ...extraFields
+        });
+      } catch (e) {
+        console.warn('Failed to broadcast ball event:', e);
+      }
+    }
+
+    function maybeSyncMyPaddle(nowMs) {
+      if (state.isPracticeBot || !db || !currentUser || !state.roomCode) return;
+      if (nowMs - lastPaddleSyncTime < 90) return; // Throttle paddle telemetry to ~11Hz
+      lastPaddleSyncTime = nowMs;
+
+      const roomRef = getRoomDocRef(state.roomCode);
+      const payload = state.role === 'P1'
+        ? { p1Y: Math.round(state.myPaddleY) }
+        : { p2Y: Math.round(state.myPaddleY) };
+
+      updateDoc(roomRef, payload).catch(() => {});
+    }
+
+    function enterCourtView() {
+      state.mode = 'PLAYING';
+      document.getElementById('lobbyModal').classList.add('hidden');
+      document.getElementById('matchOverModal').classList.add('hidden');
+
+      const hudRoleDot = document.getElementById('hudRoleDot');
+      const hudSideTitle = document.getElementById('hudSideTitle');
+      const hudRoomBadge = document.getElementById('hudRoomBadge');
+      const hudRoomCode = document.getElementById('hudRoomCode');
+
+      if (state.role === 'P1') {
+        hudRoleDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]';
+        hudSideTitle.textContent = state.isPracticeBot ? 'LEFT COURT (VS AI)' : 'LEFT COURT (P1)';
+        hudSideTitle.className = 'font-arcade text-xs sm:text-sm font-extrabold text-sky-300';
+      } else {
+        hudRoleDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#f43f5e]';
+        hudSideTitle.textContent = 'RIGHT COURT (P2)';
+        hudSideTitle.className = 'font-arcade text-xs sm:text-sm font-extrabold text-rose-400';
+      }
+
+      if (!state.isPracticeBot && state.roomCode) {
+        hudRoomBadge.classList.remove('hidden');
+        hudRoomCode.textContent = state.roomCode;
+      } else {
+        hudRoomBadge.classList.add('hidden');
+      }
+
+      updateHUD();
+    }
+
+    function startPracticeBotMode() {
+      audio.init();
+      if (roomUnsubscribe) {
+        roomUnsubscribe();
+        roomUnsubscribe = null;
+      }
+      state.isPracticeBot = true;
+      state.roomCode = '';
+      state.role = 'P1';
+      state.scoreP1 = 0;
+      state.scoreP2 = 0;
+      state.rally = 0;
+      state.servingPlayer = 'P1';
+      state.ballState = 'SERVE';
+      state.ball.speed = COURT.BASE_SPEED;
+      enterCourtView();
+      addFloatingAlert('HALF-COURT SOLO MODE: HIT BALL ACROSS THE RIGHT BORDER!', '#facc15');
+    }
+
+    const canvas = document.getElementById('pongCanvas');
+    const ctx = canvas.getContext('2d');
+    let viewW = window.innerWidth;
+    let viewH = window.innerHeight;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    const keys = { up: false, down: false };
+
+    function resizeCanvas() {
+      viewW = window.innerWidth;
+      viewH = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(viewW * dpr);
+      canvas.height = Math.floor(viewH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function clampPaddleY(y) {
+      const halfPad = COURT.PADDLE_H / 2 + 8;
+      return Math.max(halfPad, Math.min(COURT.H - halfPad, y));
+    }
+
+    function updatePaddleFromClientY(clientY) {
+      const ratioY = clientY / Math.max(1, viewH);
+      state.myPaddleY = clampPaddleY(ratioY * COURT.H);
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      updatePaddleFromClientY(e.clientY);
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+      audio.init();
+      if (e.touches.length > 0) {
+        updatePaddleFromClientY(e.touches[0].clientY);
+      }
+      if (state.mode === 'PLAYING' && state.ballState === 'SERVE' && state.servingPlayer === state.role) {
+        tryServeBall();
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        updatePaddleFromClientY(e.touches[0].clientY);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('mousedown', () => {
+      audio.init();
+      if (state.mode === 'PLAYING' && state.ballState === 'SERVE' && state.servingPlayer === state.role) {
+        tryServeBall();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return;
+
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') {
+        keys.up = true;
+      } else if (e.code === 'KeyS' || e.code === 'ArrowDown') {
+        keys.down = true;
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        audio.init();
+        if (state.mode === 'PLAYING' && state.ballState === 'SERVE' && state.servingPlayer === state.role) {
+          tryServeBall();
+        }
+      } else if (e.code === 'KeyM') {
+        toggleAudioMute();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') keys.up = false;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.down = false;
+    });
+
+    function tryServeBall() {
+      if (state.ballState !== 'SERVE' || state.servingPlayer !== state.role) return;
+
+      state.ballState = 'ACTIVE';
+      state.rally = 1;
+      state.ball.speed = COURT.BASE_SPEED;
+
+      // Launch ball from server's paddle toward the Center Rift (X = 500)
+      const dirX = state.role === 'P1' ? 1 : -1;
+      const launchAngle = (Math.random() - 0.5) * 0.55; // +/- ~16 degrees
+
+      state.ball.x = state.role === 'P1' ? COURT.P1_PADDLE_X + 18 : COURT.P2_PADDLE_X - 18;
+      state.ball.y = state.myPaddleY;
+      state.ball.vx = Math.cos(launchAngle) * state.ball.speed * dirX;
+      state.ball.vy = Math.sin(launchAngle) * state.ball.speed;
+
+      audio.playPaddleHit(true, 1);
+      spawnHitParticles(state.ball.x, state.ball.y, state.role === 'P1' ? '#38bdf8' : '#f43f5e');
+      broadcastBallEvent();
+    }
+
+    function spawnHitParticles(vx, vy, color) {
+      for (let i = 0; i < 14; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 60 + Math.random() * 220;
+        state.particles.push({
+          x: vx,
+          y: vy,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          color,
+          alpha: 1,
+          r: 2 + Math.random() * 3
+        });
+      }
+    }
+
+    function addFloatingAlert(text, color = '#38bdf8') {
+      state.floatingAlerts.push({
+        text,
+        color,
+        alpha: 1.4,
+        yOffset: 0
+      });
+    }
+
+    function isBallInMyHalf(ballX) {
+      return state.role === 'P1' ? ballX <= COURT.HALF_W : ballX >= COURT.HALF_W;
+    }
+
+    function updatePhysics(dt, nowMs) {
+      // 1. Keyboard paddle control
+      const keySpeed = 540;
+      if (keys.up) state.myPaddleY = clampPaddleY(state.myPaddleY - keySpeed * dt);
+      if (keys.down) state.myPaddleY = clampPaddleY(state.myPaddleY + keySpeed * dt);
+
+      maybeSyncMyPaddle(nowMs);
+
+      if (state.screenShake > 0) {
+        state.screenShake = Math.max(0, state.screenShake - dt * 28);
+      }
+
+      // 2. If in SERVE state, lock ball in front of the serving player's paddle
+      if (state.ballState === 'SERVE') {
+        state.trail = [];
+        if (state.servingPlayer === state.role) {
+          state.ball.x = state.role === 'P1' ? COURT.P1_PADDLE_X + 20 : COURT.P2_PADDLE_X - 20;
+          state.ball.y = state.myPaddleY;
+        } else {
+          state.ball.x = state.servingPlayer === 'P1' ? COURT.P1_PADDLE_X + 20 : COURT.P2_PADDLE_X - 20;
+          state.ball.y = state.oppPaddleY;
+
+          // If playing vs Unseen AI and it's AI's serve, AI serves automatically after a brief pause
+          if (state.isPracticeBot && state.servingPlayer === 'P2') {
+            state.ballState = 'ACTIVE';
+            state.rally = 1;
+            state.ball.speed = COURT.BASE_SPEED;
+            const ang = (Math.random() - 0.5) * 0.6;
+            state.ball.x = COURT.P2_PADDLE_X - 20;
+            state.ball.y = state.oppPaddleY;
+            state.ball.vx = -Math.cos(ang) * state.ball.speed;
+            state.ball.vy = Math.sin(ang) * state.ball.speed;
+            audio.playPaddleHit(false, 1);
+          }
+        }
+        updateHUD();
+        return;
+      }
+
+      // 3. Move active ball
+      const prevX = state.ball.x;
+      state.ball.x += state.ball.vx * dt;
+      state.ball.y += state.ball.vy * dt;
+
+      // Record trail for rendering on local half-court
+      state.trail.push({ x: state.ball.x, y: state.ball.y, alpha: 0.75 });
+      if (state.trail.length > 16) state.trail.shift();
+
+      // 4. Detect when the ball crosses the Center Rift (X = 500) between the two monitors!
+      const nowOnMySide = isBallInMyHalf(state.ball.x);
+      if (nowOnMySide !== state.wasBallOnMySide) {
+        state.wasBallOnMySide = nowOnMySide;
+        audio.playRiftCross(nowOnMySide);
+        state.seamRipples.push({
+          y: state.ball.y,
+          radius: 8,
+          alpha: 1.0,
+          entering: nowOnMySide
+        });
+      }
+
+      // 5. Top and Bottom Wall Bounces (deterministic across both clients)
+      if (state.ball.y - COURT.BALL_R <= 0) {
+        state.ball.y = COURT.BALL_R;
+        state.ball.vy = Math.abs(state.ball.vy);
+        audio.playWallBounce(nowOnMySide);
+      } else if (state.ball.y + COURT.BALL_R >= COURT.H) {
+        state.ball.y = COURT.H - COURT.BALL_R;
+        state.ball.vy = -Math.abs(state.ball.vy);
+        audio.playWallBounce(nowOnMySide);
+      }
+
+      // 6. Authoritative Half-Court Collision:
+      // Player 1 checks Left Paddle & Left Goal. Player 2 (or AI) checks Right Paddle & Right Goal.
+      if (state.role === 'P1') {
+        checkLeftCourtCollisions(prevX);
+        if (state.isPracticeBot) {
+          updateUnseenBotAndRightCourt(prevX, dt);
+        }
+      } else if (state.role === 'P2') {
+        checkRightCourtCollisions(prevX);
+      }
+
+      // 7. Update visual particles & ripples
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const pt = state.particles[i];
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.alpha -= dt * 2.2;
+        if (pt.alpha <= 0) state.particles.splice(i, 1);
+      }
+
+      for (let i = state.seamRipples.length - 1; i >= 0; i--) {
+        const rp = state.seamRipples[i];
+        rp.radius += dt * 150;
+        rp.alpha -= dt * 1.8;
+        if (rp.alpha <= 0) state.seamRipples.splice(i, 1);
+      }
+
+      for (let i = state.floatingAlerts.length - 1; i >= 0; i--) {
+        const fa = state.floatingAlerts[i];
+        fa.alpha -= dt * 0.55;
+        fa.yOffset -= dt * 22;
+        if (fa.alpha <= 0) state.floatingAlerts.splice(i, 1);
+      }
+
+      updateHUD();
+    }
+
+    function checkLeftCourtCollisions(prevX) {
+      const paddleRightEdge = COURT.P1_PADDLE_X + COURT.PADDLE_W / 2;
+
+      // Did the ball reach Player 1's paddle plane while moving left?
+      if (state.ball.vx < 0 && prevX - COURT.BALL_R >= paddleRightEdge - 12 && state.ball.x - COURT.BALL_R <= paddleRightEdge) {
+        const dy = state.ball.y - state.myPaddleY;
+        const hitHalfH = COURT.PADDLE_H / 2 + COURT.BALL_R + 4;
+
+        if (Math.abs(dy) <= hitHalfH) {
+          // Deflected by Player 1!
+          const normOffset = Math.max(-1, Math.min(1, dy / (COURT.PADDLE_H / 2)));
+          const bounceAngle = normOffset * (Math.PI / 3.1); // Up to ~58 deg
+
+          state.rally += 1;
+          state.ball.speed = Math.min(COURT.MAX_SPEED, state.ball.speed + COURT.SPEED_INCREMENT);
+          state.ball.x = paddleRightEdge + COURT.BALL_R + 1;
+          state.ball.vx = Math.cos(bounceAngle) * state.ball.speed;
+          state.ball.vy = Math.sin(bounceAngle) * state.ball.speed;
+
+          state.screenShake = 5;
+          audio.playPaddleHit(true, state.rally);
+          spawnHitParticles(state.ball.x, state.ball.y, '#38bdf8');
+          broadcastBallEvent();
+          return;
+        }
+      }
+
+      // Did Player 1 miss the ball past the Left Goal (X < 0)?
+      if (state.ball.x < -COURT.BALL_R) {
+        state.scoreP2 += 1;
+        state.servingPlayer = 'P1'; // Receiver of goal serves next
+        state.ballState = 'SERVE';
+        state.ball.vx = 0;
+        state.ball.vy = 0;
+        state.screenShake = 14;
+        audio.playScore(false);
+        addFloatingAlert('OPPONENT SCORED! YOUR SERVE', '#f43f5e');
+        checkMatchOverState();
+        broadcastBallEvent();
+      }
+    }
+
+    function checkRightCourtCollisions(prevX) {
+      const paddleLeftEdge = COURT.P2_PADDLE_X - COURT.PADDLE_W / 2;
+
+      // Did the ball reach Player 2's paddle plane while moving right?
+      if (state.ball.vx > 0 && prevX + COURT.BALL_R <= paddleLeftEdge + 12 && state.ball.x + COURT.BALL_R >= paddleLeftEdge) {
+        const dy = state.ball.y - state.myPaddleY;
+        const hitHalfH = COURT.PADDLE_H / 2 + COURT.BALL_R + 4;
+
+        if (Math.abs(dy) <= hitHalfH) {
+          // Deflected by Player 2!
+          const normOffset = Math.max(-1, Math.min(1, dy / (COURT.PADDLE_H / 2)));
+          const bounceAngle = normOffset * (Math.PI / 3.1);
+
+          state.rally += 1;
+          state.ball.speed = Math.min(COURT.MAX_SPEED, state.ball.speed + COURT.SPEED_INCREMENT);
+          state.ball.x = paddleLeftEdge - COURT.BALL_R - 1;
+          state.ball.vx = -Math.cos(bounceAngle) * state.ball.speed;
+          state.ball.vy = Math.sin(bounceAngle) * state.ball.speed;
+
+          state.screenShake = 5;
+          audio.playPaddleHit(true, state.rally);
+          spawnHitParticles(state.ball.x, state.ball.y, '#f43f5e');
+          broadcastBallEvent();
+          return;
+        }
+      }
+
+      // Did Player 2 miss the ball past the Right Goal (X > 1000)?
+      if (state.ball.x > COURT.FULL_W + COURT.BALL_R) {
+        state.scoreP1 += 1;
+        state.servingPlayer = 'P2';
+        state.ballState = 'SERVE';
+        state.ball.vx = 0;
+        state.ball.vy = 0;
+        state.screenShake = 14;
+        audio.playScore(false);
+        addFloatingAlert('OPPONENT SCORED! YOUR SERVE', '#38bdf8');
+        checkMatchOverState();
+        broadcastBallEvent();
+      }
+    }
+
+    function updateUnseenBotAndRightCourt(prevX, dt) {
+      // Unseen AI tracks ball when it enters the Right Half (X > 500)
+      const targetY = state.ball.vx > 0 ? state.ball.y : COURT.H / 2;
+      const diff = targetY - state.oppPaddleY;
+      const aiMaxSpeed = 410;
+      state.oppPaddleY = clampPaddleY(
+        state.oppPaddleY + Math.sign(diff) * Math.min(Math.abs(diff), aiMaxSpeed * dt)
+      );
+
+      const paddleLeftEdge = COURT.P2_PADDLE_X - COURT.PADDLE_W / 2;
+      if (state.ball.vx > 0 && prevX + COURT.BALL_R <= paddleLeftEdge + 12 && state.ball.x + COURT.BALL_R >= paddleLeftEdge) {
+        const dy = state.ball.y - state.oppPaddleY;
+        const hitHalfH = COURT.PADDLE_H / 2 + COURT.BALL_R;
+
+        if (Math.abs(dy) <= hitHalfH) {
+          const normOffset = Math.max(-1, Math.min(1, dy / (COURT.PADDLE_H / 2)));
+          const bounceAngle = normOffset * (Math.PI / 3.3);
+
+          state.rally += 1;
+          state.ball.speed = Math.min(COURT.MAX_SPEED, state.ball.speed + COURT.SPEED_INCREMENT);
+          state.ball.x = paddleLeftEdge - COURT.BALL_R - 1;
+          state.ball.vx = -Math.cos(bounceAngle) * state.ball.speed;
+          state.ball.vy = Math.sin(bounceAngle) * state.ball.speed;
+          audio.playPaddleHit(false, state.rally);
+          return;
+        }
+      }
+
+      if (state.ball.x > COURT.FULL_W + COURT.BALL_R) {
+        state.scoreP1 += 1;
+        state.servingPlayer = 'P1';
+        state.ballState = 'SERVE';
+        state.ball.vx = 0;
+        state.ball.vy = 0;
+        audio.playScore(true);
+        addFloatingAlert('POINT SCORED ON UNSEEN COURT! (+1)', '#38bdf8');
+        checkMatchOverState();
+      }
+    }
+
+    function checkMatchOverState() {
+      if (state.scoreP1 >= COURT.WIN_SCORE || state.scoreP2 >= COURT.WIN_SCORE) {
+        state.mode = 'GAMEOVER';
+        const p1Won = state.scoreP1 >= COURT.WIN_SCORE;
+        const iWon = (state.role === 'P1' && p1Won) || (state.role === 'P2' && !p1Won);
+
+        document.getElementById('winnerBanner').textContent = iWon
+          ? 'VICTORY — YOU WON!'
+          : (p1Won ? 'LEFT COURT (P1) WINS!' : 'RIGHT COURT (P2) WINS!');
+        document.getElementById('winnerBanner').className = `font-arcade text-2xl sm:text-3xl font-black mb-2 ${
+          iWon ? 'text-emerald-400' : 'text-rose-400'
+        }`;
+        document.getElementById('winnerSubtext').textContent = state.isPracticeBot
+          ? 'Half-court test complete!'
+          : `Room ${state.roomCode} • First to ${COURT.WIN_SCORE} points`;
+
+        document.getElementById('finalScoreP1').textContent = state.scoreP1;
+        document.getElementById('finalScoreP2').textContent = state.scoreP2;
+        document.getElementById('matchOverModal').classList.remove('hidden');
+      }
+    }
+
+    /**
+     * HALF-COURT PROJECTION LOGIC:
+     * - Player 1 ONLY sees Virtual X in [0 .. 500].
+     * - Player 2 ONLY sees Virtual X in [500 .. 1000].
+     * Any coordinate outside the player's 500-unit half maps off-screen!
+     */
+    function virtualXToScreenX(vx) {
+      let localRatio; // 0.0 (left edge of monitor) to 1.0 (right edge of monitor)
+      if (state.role === 'P1') {
+        localRatio = vx / COURT.HALF_W; // 0 at X=0 (Goal), 1 at X=500 (Center Rift)
+        if (state.mirrorView) localRatio = 1 - localRatio;
+      } else {
+        localRatio = (vx - COURT.HALF_W) / COURT.HALF_W; // 0 at X=500 (Center Rift), 1 at X=1000 (Goal)
+        if (state.mirrorView) localRatio = 1 - localRatio;
+      }
+      return localRatio * viewW;
+    }
+
+    function virtualYToScreenY(vy) {
+      return (vy / COURT.H) * viewH;
+    }
+
+    function renderHalfCourt(timeSec) {
+      ctx.save();
+
+      if (state.screenShake > 0) {
+        ctx.translate(
+          (Math.random() - 0.5) * state.screenShake,
+          (Math.random() - 0.5) * state.screenShake
+        );
+      }
+
+      // 1. Deep Cyber-Court Background
+      const bgGrad = ctx.createLinearGradient(0, 0, viewW, viewH);
+      if (state.role === 'P1') {
+        bgGrad.addColorStop(0, '#020617');
+        bgGrad.addColorStop(0.65, '#071126');
+        bgGrad.addColorStop(1, '#0f172a');
+      } else {
+        bgGrad.addColorStop(0, '#0f172a');
+        bgGrad.addColorStop(0.35, '#190819');
+        bgGrad.addColorStop(1, '#020617');
+      }
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, viewW, viewH);
+
+      // 2. Subtle Perspective Grid for Half-Court Depth
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+      ctx.lineWidth = 1;
+      const cols = 10;
+      const rows = 8;
+      for (let c = 1; c < cols; c++) {
+        const x = (c / cols) * viewW;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, viewH);
+        ctx.stroke();
+      }
+      for (let r = 1; r < rows; r++) {
+        const y = (r / rows) * viewH;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(viewW, y);
+        ctx.stroke();
+      }
+
+      // 3. Large Watermark Label in Center of This PC's Half-Court
+      ctx.save();
+      ctx.font = `900 ${Math.max(24, Math.floor(viewW * 0.045))}px 'Orbitron', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = state.role === 'P1'
+        ? 'rgba(56, 189, 248, 0.05)'
+        : 'rgba(244, 63, 94, 0.05)';
+      const courtTitle = state.role === 'P1' ? 'LEFT HALF-COURT' : 'RIGHT HALF-COURT';
+      ctx.fillText(courtTitle, viewW * 0.5, viewH * 0.5);
+
+      ctx.font = `600 13px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
+      const ballOnMySide = isBallInMyHalf(state.ball.x);
+      const subStatus = state.ballState === 'SERVE'
+        ? (state.servingPlayer === state.role ? 'PRESS SPACE OR CLICK TO SERVE ACROSS THE RIFT' : 'WAITING FOR OPPONENT TO SERVE FROM OTHER PC...')
+        : (ballOnMySide ? '⚡ BALL IN YOUR COURT — DEFEND!' : '📡 BALL IS ON OPPONENT\'S MONITOR...');
+      ctx.fillText(subStatus, viewW * 0.5, viewH * 0.5 + 42);
+      ctx.restore();
+
+      // 4. Identify which screen edge is the CENTER RIFT (X = 500) vs MY GOAL (X = 0 or 1000)
+      const riftScreenX = virtualXToScreenX(COURT.HALF_W);
+      const goalScreenX = state.role === 'P1'
+        ? virtualXToScreenX(0)
+        : virtualXToScreenX(COURT.FULL_W);
+
+      // Draw Goal Danger Zone Glow
+      const goalGrad = ctx.createLinearGradient(
+        goalScreenX,
+        0,
+        goalScreenX < viewW / 2 ? 90 : viewW - 90,
+        0
+      );
+      const myColorRgba = state.role === 'P1' ? '56, 189, 248' : '244, 63, 94';
+      goalGrad.addColorStop(0, `rgba(${myColorRgba}, 0.22)`);
+      goalGrad.addColorStop(1, `rgba(${myColorRgba}, 0)`);
+      ctx.fillStyle = goalGrad;
+      ctx.fillRect(goalScreenX < viewW / 2 ? 0 : viewW - 90, 0, 90, viewH);
+
+      // Draw Center Rift Portal Border (The seam connecting the two PCs!)
+      const distToRift = Math.abs(state.ball.x - COURT.HALF_W);
+      const proximity = Math.max(0, 1 - distToRift / 500);
+      const riftGrad = ctx.createLinearGradient(
+        riftScreenX,
+        0,
+        riftScreenX < viewW / 2 ? 120 : viewW - 120,
+        0
+      );
+      riftGrad.addColorStop(0, `rgba(250, 204, 21, ${(0.18 + proximity * 0.35).toFixed(2)})`);
+      riftGrad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+      ctx.fillStyle = riftGrad;
+      ctx.fillRect(riftScreenX < viewW / 2 ? 0 : viewW - 120, 0, 120, viewH);
+
+      // Dashed Center Net Line along the Rift Edge
+      ctx.save();
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([16, 14]);
+      ctx.lineDashOffset = -timeSec * 40;
+      ctx.beginPath();
+      const edgeX = riftScreenX < viewW / 2 ? 3 : viewW - 3;
+      ctx.moveTo(edgeX, 0);
+      ctx.lineTo(edgeX, viewH);
+      ctx.stroke();
+      ctx.restore();
+
+      // Label along the Center Rift Border
+      ctx.save();
+      ctx.translate(riftScreenX < viewW / 2 ? 22 : viewW - 22, viewH / 2);
+      ctx.rotate(riftScreenX < viewW / 2 ? -Math.PI / 2 : Math.PI / 2);
+      ctx.font = '700 11px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.65)';
+      ctx.fillText('▲ CENTER RIFT — TO OTHER PC MONITOR ▲', 0, 0);
+      ctx.restore();
+
+      // 5. Seam Radar Pip (When ball is on the OTHER player's monitor, optionally show approaching energy on the seam)
+      if (!ballOnMySide && state.ballState === 'ACTIVE' && state.showSeamRadar) {
+        const sy = virtualYToScreenY(state.ball.y);
+        const approachingMe =
+          (state.role === 'P1' && state.ball.vx < 0) ||
+          (state.role === 'P2' && state.ball.vx > 0);
+
+        ctx.save();
+        const pipX = riftScreenX < viewW / 2 ? 6 : viewW - 6;
+        const pipAlpha = approachingMe ? 0.35 + proximity * 0.65 : 0.22;
+        const pipHeight = Math.max(24, (1 - proximity) * 140 + 24);
+
+        ctx.fillStyle = approachingMe
+          ? `rgba(250, 204, 21, ${pipAlpha.toFixed(2)})`
+          : `rgba(148, 163, 184, 0.25)`;
+        ctx.beginPath();
+        ctx.roundRect(pipX - 4, sy - pipHeight / 2, 8, pipHeight, 4);
+        ctx.fill();
+
+        if (approachingMe && distToRift < 260) {
+          ctx.font = '800 11px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#fde047';
+          ctx.textAlign = riftScreenX < viewW / 2 ? 'left' : 'right';
+          ctx.fillText(
+            'INCOMING!',
+            riftScreenX < viewW / 2 ? 18 : viewW - 18,
+            sy + 4
+          );
+        }
+        ctx.restore();
+      }
+
+      // 6. Draw Rift Crossing Ripples
+      for (let i = 0; i < state.seamRipples.length; i++) {
+        const rp = state.seamRipples[i];
+        const ry = virtualYToScreenY(rp.y);
+        ctx.save();
+        ctx.strokeStyle = rp.entering
+          ? `rgba(56, 189, 248, ${rp.alpha.toFixed(2)})`
+          : `rgba(250, 204, 21, ${rp.alpha.toFixed(2)})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(riftScreenX, ry, rp.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 7. Draw ONLY Local Player's Paddle (Opponent's paddle is on the other PC!)
+      const myVirtualX = state.role === 'P1' ? COURT.P1_PADDLE_X : COURT.P2_PADDLE_X;
+      const padScreenX = virtualXToScreenX(myVirtualX);
+      const padScreenY = virtualYToScreenY(state.myPaddleY);
+      const padScreenW = Math.max(12, (COURT.PADDLE_W / COURT.HALF_W) * viewW);
+      const padScreenH = (COURT.PADDLE_H / COURT.H) * viewH;
+
+      ctx.save();
+      const padColor = state.role === 'P1' ? '#38bdf8' : '#fb7185';
+      ctx.shadowColor = padColor;
+      ctx.shadowBlur = 22;
+      ctx.fillStyle = padColor;
+      ctx.beginPath();
+      ctx.roundRect(
+        padScreenX - padScreenW / 2,
+        padScreenY - padScreenH / 2,
+        padScreenW,
+        padScreenH,
+        8
+      );
+      ctx.fill();
+
+      // Inner white core on paddle
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(
+        padScreenX - padScreenW * 0.22,
+        padScreenY - padScreenH * 0.38,
+        padScreenW * 0.44,
+        padScreenH * 0.76,
+        4
+      );
+      ctx.fill();
+      ctx.restore();
+
+      // 8. Draw Ball & Trail ONLY when inside this PC's half-court (with slight margin at the seam)
+      for (let i = 0; i < state.trail.length; i++) {
+        const tr = state.trail[i];
+        if (!isBallInMyHalf(tr.x)) continue;
+        const tx = virtualXToScreenX(tr.x);
+        const ty = virtualYToScreenY(tr.y);
+        const ratio = (i + 1) / state.trail.length;
+        const rad = ((COURT.BALL_R * ratio) / COURT.H) * viewH;
+
+        ctx.fillStyle = `rgba(250, 204, 21, ${(ratio * 0.38).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Render Ball if on this player's half of the court
+      const seamMargin = 18;
+      const visibleOnThisMonitor = state.role === 'P1'
+        ? state.ball.x <= COURT.HALF_W + seamMargin
+        : state.ball.x >= COURT.HALF_W - seamMargin;
+
+      if (visibleOnThisMonitor) {
+        const bx = virtualXToScreenX(state.ball.x);
+        const by = virtualYToScreenY(state.ball.y);
+        const br = Math.max(8, (COURT.BALL_R / COURT.H) * viewH);
+
+        ctx.save();
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 24;
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(bx, by, br, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(bx, by, br * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 9. Render Hit Particles on this screen
+      for (let i = 0; i < state.particles.length; i++) {
+        const pt = state.particles[i];
+        if (!isBallInMyHalf(pt.x)) continue;
+        const px = virtualXToScreenX(pt.x);
+        const py = virtualYToScreenY(pt.y);
+        ctx.fillStyle = pt.color;
+        ctx.globalAlpha = Math.max(0, pt.alpha);
+        ctx.beginPath();
+        ctx.arc(px, py, pt.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // 10. Floating Alerts
+      for (let i = 0; i < state.floatingAlerts.length; i++) {
+        const fa = state.floatingAlerts[i];
+        ctx.save();
+        ctx.font = '800 15px "Orbitron", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = Math.min(1, Math.max(0, fa.alpha));
+        ctx.fillStyle = fa.color;
+        ctx.fillText(fa.text, viewW / 2, viewH * 0.24 + fa.yOffset);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    const scoreP1El = document.getElementById('scoreP1');
+    const scoreP2El = document.getElementById('scoreP2');
+    const courtBallStatusEl = document.getElementById('courtBallStatus');
+    const hudRallyEl = document.getElementById('hudRally');
+    const hudSpeedEl = document.getElementById('hudSpeed');
+
+    function updateHUD() {
+      scoreP1El.textContent = state.scoreP1;
+      scoreP2El.textContent = state.scoreP2;
+      hudRallyEl.textContent = `RALLY: ${state.rally}`;
+      const speedPct = Math.round((state.ball.speed / COURT.BASE_SPEED) * 100);
+      hudSpeedEl.textContent = `${speedPct}% SPD`;
+
+      if (state.ballState === 'SERVE') {
+        if (state.servingPlayer === state.role) {
+          courtBallStatusEl.textContent = 'YOUR SERVE (SPACE)';
+          courtBallStatusEl.className = 'text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 animate-pulse';
+        } else {
+          courtBallStatusEl.textContent = 'OPPONENT SERVING';
+          courtBallStatusEl.className = 'text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700';
+        }
+      } else {
+        const onMySide = isBallInMyHalf(state.ball.x);
+        if (onMySide) {
+          courtBallStatusEl.textContent = '⚡ IN YOUR COURT';
+          courtBallStatusEl.className = 'text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40';
+        } else {
+          courtBallStatusEl.textContent = '📡 OTHER PC SCREEN';
+          courtBallStatusEl.className = 'text-[10px] sm:text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-800/90 text-amber-300 border border-amber-400/30';
+        }
+      }
+    }
+
+    function copyCodeToClipboard(codeStr, btnEl) {
+      if (!codeStr) return;
+      const tempInput = document.createElement('textarea');
+      tempInput.value = codeStr;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+
+      const original = btnEl.textContent;
+      btnEl.textContent = 'Copied!';
+      setTimeout(() => {
+        btnEl.textContent = original;
+      }, 1400);
+    }
+
+    function toggleAudioMute() {
+      audio.init();
+      const muted = audio.toggleMute();
+      document.getElementById('iconAudioOn').classList.toggle('hidden', muted);
+      document.getElementById('iconAudioOff').classList.toggle('hidden', !muted);
+    }
+
+    document.getElementById('btnCreateRoom').addEventListener('click', createMultiplayerRoom);
+    document.getElementById('btnEnterAsHost').addEventListener('click', enterCourtView);
+    document.getElementById('btnJoinRoom').addEventListener('click', joinMultiplayerRoom);
+    document.getElementById('btnPracticeBot').addEventListener('click', startPracticeBotMode);
+
+    document.getElementById('inputRoomCode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinMultiplayerRoom();
+    });
+
+    document.getElementById('btnCopyLobbyCode').addEventListener('click', (e) => {
+      copyCodeToClipboard(state.roomCode, e.currentTarget);
+    });
+
+    document.getElementById('btnCopyHudCode').addEventListener('click', (e) => {
+      copyCodeToClipboard(state.roomCode, e.currentTarget);
+    });
+
+    document.getElementById('btnFlipSide').addEventListener('click', () => {
+      state.mirrorView = !state.mirrorView;
+      document.getElementById('lblFlipSide').textContent = state.mirrorView
+        ? 'Goal: Flipped'
+        : 'Goal: Outer Edge';
+    });
+
+    document.getElementById('btnToggleRadar').addEventListener('click', () => {
+      state.showSeamRadar = !state.showSeamRadar;
+      document.getElementById('lblRadarMode').textContent = state.showSeamRadar
+        ? 'Seam Radar: ON'
+        : 'Seam Radar: BLIND';
+    });
+
+    document.getElementById('btnMute').addEventListener('click', toggleAudioMute);
+
+    document.getElementById('btnLeaveRoom').addEventListener('click', () => {
+      state.mode = 'LOBBY';
+      document.getElementById('lobbyModal').classList.remove('hidden');
+      document.getElementById('matchOverModal').classList.add('hidden');
+    });
+
+    document.getElementById('btnBackToLobby').addEventListener('click', () => {
+      state.mode = 'LOBBY';
+      document.getElementById('matchOverModal').classList.add('hidden');
+      document.getElementById('lobbyModal').classList.remove('hidden');
+    });
+
+    document.getElementById('btnRematch').addEventListener('click', () => {
+      state.scoreP1 = 0;
+      state.scoreP2 = 0;
+      state.rally = 0;
+      state.servingPlayer = state.role;
+      state.ballState = 'SERVE';
+      state.ball.vx = 0;
+      state.ball.vy = 0;
+      state.ball.speed = COURT.BASE_SPEED;
+      state.mode = 'PLAYING';
+      document.getElementById('matchOverModal').classList.add('hidden');
+      broadcastBallEvent();
+    });
+
+    let lastTime = performance.now();
+
+    function mainLoop(now) {
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      lastTime = now;
+
+      if (state.mode === 'PLAYING') {
+        updatePhysics(dt, now);
+      }
+
+      renderHalfCourt(now / 1000);
+      requestAnimationFrame(mainLoop);
+    }
+
+    window.onload = function () {
+      updateHUD();
+      lastTime = performance.now();
+      requestAnimationFrame(mainLoop);
+    };
+  </script>
+</body>
+</html>
